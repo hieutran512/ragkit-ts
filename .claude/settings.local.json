@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test:*)",
+      "Bash(git -C /c/projects/rag-ts log --oneline -5)",
+      "Bash(npm install)",
+      "Bash(npm run build:*)",
+      "Bash(node -e:*)",
+      "Bash(npm pack:*)",
+      "Bash(node:*)"
+    ]
+  }
+}

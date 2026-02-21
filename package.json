@@ -1,0 +1,77 @@
+{
+  "name": "ragkit-ts",
+  "version": "0.1.0",
+  "description": "Code and document context extraction for AI agents — chunking, symbol extraction, and embedding for codebases",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "prepublishOnly": "npm run build",
+    "release:patch": "npm version patch && npm publish --access public",
+    "release:minor": "npm version minor && npm publish --access public",
+    "release:major": "npm version major && npm publish --access public"
+  },
+  "keywords": [
+    "rag",
+    "code",
+    "chunking",
+    "embedding",
+    "vector-search",
+    "ast",
+    "tree-sitter",
+    "codebase",
+    "context",
+    "ai-agents",
+    "llm"
+  ],
+  "author": "hieutran512",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hieutran512/rag-ts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hieutran512/rag-ts/issues"
+  },
+  "homepage": "https://github.com/hieutran512/rag-ts#readme",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public",
+    "provenance": false
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "tree-sitter-ts": "^0.1.0"
+  },
+  "devDependencies": {
+    "@swc/core": "^1.15.11",
+    "@swc/jest": "^0.2.39",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.13.4",
+    "jest": "^30.2.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3"
+  }
+}
