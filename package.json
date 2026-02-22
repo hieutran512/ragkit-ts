@@ -47,12 +47,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hieutran512/rag-ts.git"
+    "url": "https://github.com/hieutran512/ragkit-ts"
   },
   "bugs": {
-    "url": "https://github.com/hieutran512/rag-ts/issues"
+    "url": "https://github.com/hieutran512/ragkit-ts/issues"
   },
-  "homepage": "https://github.com/hieutran512/rag-ts#readme",
+  "homepage": "https://github.com/hieutran512/ragkit-ts#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public",
