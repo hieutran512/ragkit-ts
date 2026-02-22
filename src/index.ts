@@ -12,6 +12,7 @@ export { TextChunker } from "./chunking/index.js";
 export { CodeChunker } from "./chunking/index.js";
 export { getGrammarForExtension, getSymbolNodeTypes, nodeTypeToSymbolKind } from "./chunking/index.js";
 export { EXTENSION_TO_GRAMMAR, SYMBOL_NODE_TYPES } from "./chunking/index.js";
+export type { LanguageProfile, CodeSymbol as TreeSitterCodeSymbol, SymbolKind } from "tree-sitter-ts";
 
 // Vector search
 export { cosineSimilarity } from "./vector/index.js";

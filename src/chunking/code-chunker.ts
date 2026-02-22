@@ -2,7 +2,7 @@ import { CHUNK_SIZE, CHUNK_OVERLAP } from "../defaults.js";
 import type { ChunkResult, ChunkingOptions, CodeSymbol } from "../types.js";
 import { getGrammarForExtension } from "./languages.js";
 import { TextChunker } from "./text-chunker.js";
-import { extractSymbols as extractTreeSitterSymbols, getProfile } from "tree-sitter-ts";
+import { extractSymbols as extractTreeSitterSymbols, getProfile, type CodeSymbol as TreeSitterCodeSymbol } from "tree-sitter-ts";
 
 interface SymbolSpan {
     symbol: CodeSymbol;
@@ -49,7 +49,7 @@ function normalizeSymbolKind(
 }
 
 function extractSymbolsFromTreeSitterTs(source: string, language: string): SymbolSpan[] {
-    const symbols = extractTreeSitterSymbols(source, language);
+    const symbols: TreeSitterCodeSymbol[] = extractTreeSitterSymbols(source, language);
     if (symbols.length === 0) return [];
 
     const offsets = lineStartOffsets(source);

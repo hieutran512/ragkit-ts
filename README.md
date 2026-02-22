@@ -255,14 +255,12 @@ await indexer.index("c:/projects/knowledge-base", {
 ### Example B: developer provides a new custom profile
 
 ```ts
-import {
-  registerProfile,
-  type LanguageProfile,
-} from "tree-sitter-ts";
+import { registerProfile } from "tree-sitter-ts";
 import {
   CodebaseIndexer,
   createOllamaEmbed,
   EXTENSION_TO_GRAMMAR,
+  type LanguageProfile,
 } from "ragkit-ts";
 
 const toyProfile: LanguageProfile = {
