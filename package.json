@@ -1,6 +1,6 @@
 {
   "name": "ragkit-ts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Code and document context extraction for AI agents — chunking, symbol extraction, and embedding for codebases",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -23,9 +23,9 @@
   ],
   "scripts": {
     "build": "tsup",
-    "test": "jest --runInBand",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
+    "test": "jest --config jest.config.ts --runInBand",
+    "test:watch": "jest --config jest.config.ts --watch",
+    "test:coverage": "jest --config jest.config.ts --coverage",
     "prepublishOnly": "npm run build",
     "release:patch": "npm version patch && npm publish --access public",
     "release:minor": "npm version minor && npm publish --access public",
@@ -63,7 +63,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "tree-sitter-ts": "^0.1.0"
+    "tree-sitter-ts": "^0.1.1"
   },
   "devDependencies": {
     "@swc/core": "^1.15.11",
@@ -71,6 +71,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^22.13.4",
     "jest": "^30.2.0",
+    "tsx": "^4.20.5",
     "tsup": "^8.4.0",
     "typescript": "^5.7.3"
   }

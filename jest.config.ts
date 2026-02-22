@@ -1,5 +1,6 @@
-/** @type {import('jest').Config} */
-module.exports = {
+import type { Config } from "jest";
+
+const config: Config = {
     testEnvironment: "node",
     testMatch: ["**/tests/**/*.test.ts"],
     extensionsToTreatAsEsm: [".ts"],
@@ -25,3 +26,5 @@ module.exports = {
     },
     collectCoverageFrom: ["src/**/*.ts", "!src/index.ts"],
 };
+
+export default config;
