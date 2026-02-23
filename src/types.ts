@@ -60,8 +60,14 @@ export interface RagSearchResult {
 export interface CodeSymbol {
     name: string;
     kind: "function" | "class" | "method" | "interface" | "type" | "enum" | "module" | "variable" | "import" | "export" | "other";
-    startLine: number;
-    endLine: number;
+    nameRange: {
+        start: { line: number; column: number; offset: number };
+        end: { line: number; column: number; offset: number };
+    };
+    contentRange: {
+        start: { line: number; column: number; offset: number };
+        end: { line: number; column: number; offset: number };
+    };
 }
 
 export interface RagChunk {

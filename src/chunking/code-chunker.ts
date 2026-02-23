@@ -10,22 +10,9 @@ interface SymbolSpan {
     endIndex: number;
 }
 
-function lineStartOffsets(source: string): number[] {
-    const offsets = [0];
-    for (let index = 0; index < source.length; index++) {
-        if (source[index] === "\n") {
-            offsets.push(index + 1);
-        }
-    }
-    return offsets;
-}
-
-function toIndexFromLine(line: number, offsets: number[], sourceLength: number): number {
-    if (line <= 1) return 0;
-    const offsetIndex = Math.min(Math.max(0, line - 1), offsets.length - 1);
-    const candidate = offsets[offsetIndex];
-    if (typeof candidate === "number") return candidate;
-    return sourceLength;
+function clampOffset(offset: number, sourceLength: number): number {
+    if (!Number.isFinite(offset)) return 0;
+    return Math.max(0, Math.min(Math.trunc(offset), sourceLength));
 }
 
 function normalizeSymbolKind(
@@ -52,17 +39,20 @@ function extractSymbolsFromTreeSitterTs(source: string, language: string): Symbo
     const symbols: TreeSitterCodeSymbol[] = extractTreeSitterSymbols(source, language);
     if (symbols.length === 0) return [];
 
-    const offsets = lineStartOffsets(source);
     const ordered = symbols
         .slice()
-        .sort((left, right) => left.startLine - right.startLine || left.endLine - right.endLine);
+        .sort((left, right) => {
+            const startDiff = left.contentRange.start.offset - right.contentRange.start.offset;
+            if (startDiff !== 0) return startDiff;
+            return left.contentRange.end.offset - right.contentRange.end.offset;
+        });
 
     const spans: SymbolSpan[] = [];
     let lastEndIndex = 0;
 
     for (const symbol of ordered) {
-        const startIndex = toIndexFromLine(symbol.startLine, offsets, source.length);
-        const endIndex = toIndexFromLine(symbol.endLine + 1, offsets, source.length);
+        const startIndex = clampOffset(symbol.contentRange.start.offset, source.length);
+        const endIndex = clampOffset(symbol.contentRange.end.offset, source.length);
         if (endIndex <= startIndex) continue;
 
         const clampedStart = Math.max(startIndex, lastEndIndex);
@@ -72,8 +62,8 @@ function extractSymbolsFromTreeSitterTs(source: string, language: string): Symbo
             symbol: {
                 name: symbol.name?.trim() || `<${symbol.kind}>`,
                 kind: normalizeSymbolKind(symbol.kind),
-                startLine: symbol.startLine,
-                endLine: symbol.endLine,
+                nameRange: symbol.nameRange,
+                contentRange: symbol.contentRange,
             },
             startIndex: clampedStart,
             endIndex,
@@ -133,6 +123,16 @@ export class CodeChunker {
         const results: ChunkResult[] = [];
         let pendingContent = "";
         let pendingSymbols: CodeSymbol[] = [];
+        let cursor = 0;
+
+        const pushPlainText = (text: string) => {
+            const trimmed = text.trim();
+            if (!trimmed) return;
+            const chunks = this.textChunker.chunk(trimmed);
+            for (const chunk of chunks) {
+                results.push({ content: chunk.content });
+            }
+        };
 
         const flushPending = () => {
             if (!pendingContent.trim()) {
@@ -159,16 +159,18 @@ export class CodeChunker {
             pendingSymbols = [];
         };
 
-        // Cover any content before the first symbol
-        if (spans.length > 0 && spans[0].startIndex > 0) {
-            const preamble = content.slice(0, spans[0].startIndex).trim();
-            if (preamble) {
-                pendingContent = preamble;
-            }
-        }
-
         for (const span of spans) {
+            if (span.startIndex > cursor) {
+                const gap = content.slice(cursor, span.startIndex);
+                flushPending();
+                pushPlainText(gap);
+            }
+
             const symbolText = content.slice(span.startIndex, span.endIndex);
+            if (!symbolText.trim()) {
+                cursor = Math.max(cursor, span.endIndex);
+                continue;
+            }
 
             // If adding this symbol would exceed chunk size, flush first
             if (pendingContent.length > 0 && pendingContent.length + symbolText.length + 1 > this.chunkSize) {
@@ -181,10 +183,17 @@ export class CodeChunker {
                 pendingContent = symbolText;
             }
             pendingSymbols.push(span.symbol);
+            cursor = Math.max(cursor, span.endIndex);
         }
 
         // Flush remaining
         flushPending();
+
+        // Cover trailing content after the last symbol
+        if (cursor < content.length) {
+            const trailing = content.slice(cursor);
+            pushPlainText(trailing);
+        }
 
         // If we produced nothing (unlikely), fall back
         if (results.length === 0) {

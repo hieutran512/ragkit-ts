@@ -1,6 +1,6 @@
 {
   "name": "ragkit-ts",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Code and document context extraction for AI agents — chunking, symbol extraction, and embedding for codebases",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -57,13 +57,13 @@
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public",
-    "provenance": false
+    "provenance": true
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "tree-sitter-ts": "^0.1.2"
+    "tree-sitter-ts": "^0.1.3"
   },
   "devDependencies": {
     "@swc/core": "^1.15.11",
