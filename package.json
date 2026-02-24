@@ -1,6 +1,6 @@
 {
   "name": "ragkit-ts",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Code and document context extraction for AI agents — chunking, symbol extraction, and embedding for codebases",
   "type": "module",
   "main": "./dist/index.cjs",

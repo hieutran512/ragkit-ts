@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, CHUNK_OVERLAP } from "../defaults.js";
+import { CHUNK_SIZE, CHUNK_OVERLAP, MIN_CHUNK_SIZE } from "../defaults.js";
 import type { ChunkResult, ChunkingOptions, CodeSymbol } from "../types.js";
 import { getGrammarForExtension } from "./languages.js";
 import { TextChunker } from "./text-chunker.js";
@@ -125,15 +125,6 @@ export class CodeChunker {
         let pendingSymbols: CodeSymbol[] = [];
         let cursor = 0;
 
-        const pushPlainText = (text: string) => {
-            const trimmed = text.trim();
-            if (!trimmed) return;
-            const chunks = this.textChunker.chunk(trimmed);
-            for (const chunk of chunks) {
-                results.push({ content: chunk.content });
-            }
-        };
-
         const flushPending = () => {
             if (!pendingContent.trim()) {
                 pendingContent = "";
@@ -159,11 +150,25 @@ export class CodeChunker {
             pendingSymbols = [];
         };
 
+        const appendToPending = (text: string) => {
+            if (pendingContent.length > 0) {
+                pendingContent += "\n" + text;
+            } else {
+                pendingContent = text;
+            }
+        };
+
         for (const span of spans) {
+            // Include gap text between previous cursor and this symbol
             if (span.startIndex > cursor) {
-                const gap = content.slice(cursor, span.startIndex);
-                flushPending();
-                pushPlainText(gap);
+                const gap = content.slice(cursor, span.startIndex).trim();
+                if (gap) {
+                    // If adding gap would exceed chunk size, flush first
+                    if (pendingContent.length > 0 && pendingContent.length + gap.length + 1 > this.chunkSize) {
+                        flushPending();
+                    }
+                    appendToPending(gap);
+                }
             }
 
             const symbolText = content.slice(span.startIndex, span.endIndex);
@@ -177,11 +182,7 @@ export class CodeChunker {
                 flushPending();
             }
 
-            if (pendingContent.length > 0) {
-                pendingContent += "\n" + symbolText;
-            } else {
-                pendingContent = symbolText;
-            }
+            appendToPending(symbolText);
             pendingSymbols.push(span.symbol);
             cursor = Math.max(cursor, span.endIndex);
         }
@@ -191,8 +192,13 @@ export class CodeChunker {
 
         // Cover trailing content after the last symbol
         if (cursor < content.length) {
-            const trailing = content.slice(cursor);
-            pushPlainText(trailing);
+            const trailing = content.slice(cursor).trim();
+            if (trailing) {
+                const chunks = this.textChunker.chunk(trailing);
+                for (const chunk of chunks) {
+                    results.push({ content: chunk.content });
+                }
+            }
         }
 
         // If we produced nothing (unlikely), fall back
@@ -200,6 +206,38 @@ export class CodeChunker {
             return this.textChunker.chunk(content);
         }
 
-        return results;
+        return this.mergeSmallChunks(results);
+    }
+
+    private mergeSmallChunks(chunks: ChunkResult[]): ChunkResult[] {
+        if (chunks.length <= 1) return chunks;
+
+        const merged: ChunkResult[] = [];
+
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            if (chunk.content.length >= MIN_CHUNK_SIZE || merged.length === 0) {
+                merged.push({ ...chunk });
+                continue;
+            }
+            // Merge small chunk into the previous one
+            const prev = merged[merged.length - 1];
+            prev.content = prev.content + "\n" + chunk.content;
+            if (chunk.symbols) {
+                prev.symbols = [...(prev.symbols || []), ...chunk.symbols];
+            }
+        }
+
+        // If the last chunk is still too small and there's a previous one, merge backward
+        if (merged.length > 1 && merged[merged.length - 1].content.length < MIN_CHUNK_SIZE) {
+            const last = merged.pop()!;
+            const prev = merged[merged.length - 1];
+            prev.content = prev.content + "\n" + last.content;
+            if (last.symbols) {
+                prev.symbols = [...(prev.symbols || []), ...last.symbols];
+            }
+        }
+
+        return merged;
     }
 }

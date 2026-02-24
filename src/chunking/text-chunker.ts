@@ -22,13 +22,23 @@ export class TextChunker {
         let start = 0;
 
         while (start < clean.length) {
-            const end = Math.min(clean.length, start + this.chunkSize);
+            let end = Math.min(clean.length, start + this.chunkSize);
+
+            // Try to break at a newline boundary to avoid splitting mid-identifier
+            if (end < clean.length) {
+                const searchStart = Math.max(start, end - Math.floor(this.chunkSize * 0.2));
+                const lastNewline = clean.lastIndexOf("\n", end);
+                if (lastNewline >= searchStart) {
+                    end = lastNewline + 1;
+                }
+            }
+
             const text = clean.slice(start, end).trim();
             if (text) {
                 results.push({ content: text });
             }
             if (end >= clean.length) break;
-            start = Math.max(0, end - this.chunkOverlap);
+            start = Math.max(start + 1, end - this.chunkOverlap);
         }
 
         return results;

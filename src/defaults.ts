@@ -4,6 +4,7 @@
 
 export const CHUNK_SIZE = 1200;
 export const CHUNK_OVERLAP = 200;
+export const MIN_CHUNK_SIZE = 200;
 
 // ---------------------------------------------------------------------------
 // Embedding
