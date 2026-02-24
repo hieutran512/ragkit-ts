@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@jest/globals";
+import { describe, expect, it } from "vitest";
 import { cosineSimilarity } from "../../src/vector/similarity.js";
 import { LshIndex } from "../../src/vector/lsh.js";
 import type { RagChunk } from "../../src/types.js";

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@jest/globals";
+import { describe, expect, it } from "vitest";
 import { CodeChunker } from "../../src/chunking/code-chunker.js";
 
 describe("CodeChunker", () => {
@@ -44,7 +44,6 @@ describe("CodeChunker", () => {
 
         const chunker = new CodeChunker({ chunkSize: 80, chunkOverlap: 10 });
         const chunks = await chunker.chunk(source, { fileExtension: ".ts" });
-        console.log("chunks:", JSON.stringify(chunks, null, 2));
 
         expect(chunks.some((chunk) => chunk.content.includes("const trailing"))).toBe(true);
     });

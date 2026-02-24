@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, jest } from "@jest/globals";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOpenAICompatibleEmbed } from "../../src/embedding/openai-compatible.js";
 
 describe("createOpenAICompatibleEmbed", () => {
@@ -6,11 +6,11 @@ describe("createOpenAICompatibleEmbed", () => {
 
     afterEach(() => {
         global.fetch = originalFetch;
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     it("calls /v1/embeddings and returns vectors in index order", async () => {
-        const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
+        const fetchMock = vi.fn<typeof fetch>();
         fetchMock.mockImplementation(async () => ({
             ok: true,
             json: async () => ({
@@ -35,7 +35,7 @@ describe("createOpenAICompatibleEmbed", () => {
     });
 
     it("supports auth and custom headers", async () => {
-        const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
+        const fetchMock = vi.fn<typeof fetch>();
         fetchMock.mockImplementation(async () => ({
             ok: true,
             json: async () => ({ data: [{ index: 0, embedding: [1, 2, 3] }] }),
@@ -60,7 +60,7 @@ describe("createOpenAICompatibleEmbed", () => {
     });
 
     it("throws with API response details on non-2xx", async () => {
-        const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
+        const fetchMock = vi.fn<typeof fetch>();
         fetchMock.mockImplementation(async () => ({
             ok: false,
             status: 401,
@@ -76,7 +76,7 @@ describe("createOpenAICompatibleEmbed", () => {
     });
 
     it("returns empty list for empty input", async () => {
-        const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
+        const fetchMock = vi.fn<typeof fetch>();
         global.fetch = fetchMock as unknown as typeof fetch;
 
         const embed = createOpenAICompatibleEmbed();

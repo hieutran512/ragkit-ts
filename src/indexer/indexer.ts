@@ -14,12 +14,10 @@ import type {
     EmbedFunction,
     FolderCache,
     IndexOptions,
-    RagChunk,
     RagFolderConfig,
     RagStatus,
 } from "../types.js";
 import { CodeChunker } from "../chunking/code-chunker.js";
-import { TextChunker } from "../chunking/text-chunker.js";
 import { scanDirectory } from "../scanner/file-scanner.js";
 import { loadFromDisk, saveToDisk, getDbSizeBytes } from "../storage/disk-storage.js";
 import { clearStorage } from "../storage/disk-storage.js";
@@ -102,14 +100,12 @@ export class CodebaseIndexer {
     private embed: EmbedFunction;
     private caches = new Map<string, FolderCache>();
     private codeChunker: CodeChunker;
-    private textChunker: TextChunker;
     private lsh = new LshIndex();
 
     constructor(options: CodebaseIndexerOptions) {
         this.embed = options.embed;
         const useCode = options.codeAwareChunking !== false;
         this.codeChunker = useCode ? new CodeChunker() : new CodeChunker();
-        this.textChunker = new TextChunker();
     }
 
     // -----------------------------------------------------------------------

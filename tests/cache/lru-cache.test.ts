@@ -1,9 +1,9 @@
-import { describe, expect, it, jest, afterEach } from "@jest/globals";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LruCache } from "../../src/cache/lru-cache.js";
 
 describe("LruCache", () => {
     afterEach(() => {
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     it("stores and reads values", () => {
@@ -17,7 +17,7 @@ describe("LruCache", () => {
 
     it("expires values when TTL is exceeded", () => {
         let now = 1000;
-        jest.spyOn(Date, "now").mockImplementation(() => now);
+        vi.spyOn(Date, "now").mockImplementation(() => now);
 
         const cache = new LruCache<string>(5, 100);
         cache.set("k", "v");
@@ -32,7 +32,7 @@ describe("LruCache", () => {
 
     it("evicts the oldest entries when max size is exceeded", () => {
         let now = 1;
-        jest.spyOn(Date, "now").mockImplementation(() => now++);
+        vi.spyOn(Date, "now").mockImplementation(() => now++);
 
         const cache = new LruCache<number>(2);
         cache.set("first", 1);

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, jest } from "@jest/globals";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOllamaEmbed } from "../../src/embedding/ollama.js";
 
 describe("createOllamaEmbed", () => {
@@ -6,11 +6,11 @@ describe("createOllamaEmbed", () => {
 
     afterEach(() => {
         global.fetch = originalFetch;
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     it("uses batch endpoint when available", async () => {
-        const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
+        const fetchMock = vi.fn<typeof fetch>();
         fetchMock.mockImplementation(async () => ({
             ok: true,
             json: async () => ({ embeddings: [[1, 0], [0, 1]] }),
@@ -26,7 +26,7 @@ describe("createOllamaEmbed", () => {
     });
 
     it("falls back to per-input endpoint when batch is unavailable", async () => {
-        const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
+        const fetchMock = vi.fn<typeof fetch>();
         fetchMock.mockImplementationOnce(async () => ({
             ok: false,
             status: 404,
@@ -53,7 +53,7 @@ describe("createOllamaEmbed", () => {
     });
 
     it("throws when fallback embedding request fails", async () => {
-        const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
+        const fetchMock = vi.fn<typeof fetch>();
         fetchMock.mockImplementationOnce(async () => ({
             ok: false,
             status: 500,
@@ -76,7 +76,7 @@ describe("createOllamaEmbed", () => {
     });
 
     it("returns empty list for empty input", async () => {
-        const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
+        const fetchMock = vi.fn<typeof fetch>();
         global.fetch = fetchMock as unknown as typeof fetch;
 
         const embed = createOllamaEmbed();

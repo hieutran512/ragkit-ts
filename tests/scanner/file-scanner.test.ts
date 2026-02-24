@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "@jest/globals";
+import { afterEach, describe, expect, it } from "vitest";
 import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";

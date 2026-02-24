@@ -23,8 +23,9 @@
   ],
   "scripts": {
     "build": "tsup",
-    "test": "jest --config jest.config.ts --runInBand",
-    "test:watch": "jest --config jest.config.ts --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build",
     "release:patch": "npm version patch && npm publish --access public",
@@ -67,12 +68,10 @@
   },
   "devDependencies": {
     "@swc/core": "^1.15.11",
-    "@swc/jest": "^0.2.39",
-    "@types/jest": "^30.0.0",
     "@types/node": "^22.13.4",
-    "jest": "^30.2.0",
     "tsup": "^8.4.0",
     "tsx": "^4.20.5",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.4"
   }
 }
