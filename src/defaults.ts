@@ -11,6 +11,7 @@ export const CHUNK_OVERLAP = 200;
 
 export const EMBED_BATCH_SIZE = 16;
 export const FILE_EMBED_CONCURRENCY = 2;
+export const EMBEDDING_PRECISION = 1e6; // 6 decimal places for persisted embeddings
 
 // ---------------------------------------------------------------------------
 // Search

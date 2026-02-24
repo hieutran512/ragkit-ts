@@ -6,6 +6,7 @@ import {
     RAG_INDEX_FILE,
     RAG_DB_VERSION,
     RAG_INDEX_VERSION,
+    EMBEDDING_PRECISION,
 } from "../defaults.js";
 import type { RagChunk, RagFileState, PersistedRagDb, PersistedRagIndex } from "../types.js";
 
@@ -13,6 +14,19 @@ export interface LoadResult {
     chunks: Map<string, RagChunk>;
     fileStates: Map<string, RagFileState>;
     lastIndexedAt?: number;
+}
+
+/** Lean chunk written to disk — only fields needed for search. */
+interface PersistedChunk {
+    id: string;
+    filePath: string;
+    content: string;
+    embedding: number[];
+}
+
+function truncateEmbedding(embedding: number[]): number[] {
+    const factor = EMBEDDING_PRECISION;
+    return embedding.map((v) => Math.round(v * factor) / factor);
 }
 
 function getPaths(folderPath: string) {
@@ -43,9 +57,15 @@ export async function loadFromDisk(folderPath: string): Promise<LoadResult> {
         if (rawDb) {
             const parsedDb = JSON.parse(rawDb) as PersistedRagDb;
             if (parsedDb.version === RAG_DB_VERSION && Array.isArray(parsedDb.chunks)) {
-                for (const chunk of parsedDb.chunks) {
-                    if (!chunk || !chunk.id || !Array.isArray(chunk.embedding)) continue;
-                    chunks.set(chunk.id, chunk);
+                for (const raw of parsedDb.chunks) {
+                    if (!raw || !raw.id || !Array.isArray(raw.embedding)) continue;
+                    chunks.set(raw.id, {
+                        id: raw.id,
+                        filePath: raw.filePath ?? "",
+                        modifiedAt: typeof raw.modifiedAt === "number" ? raw.modifiedAt : 0,
+                        content: raw.content ?? "",
+                        embedding: raw.embedding,
+                    });
                 }
             }
         }
@@ -91,9 +111,16 @@ export async function saveToDisk(
     const { ragDir, dbPath, indexPath } = getPaths(folderPath);
     await mkdir(ragDir, { recursive: true });
 
-    const dbPayload: PersistedRagDb = {
+    const leanChunks: PersistedChunk[] = Array.from(chunks.values()).map((chunk) => ({
+        id: chunk.id,
+        filePath: chunk.filePath,
+        content: chunk.content,
+        embedding: truncateEmbedding(chunk.embedding),
+    }));
+
+    const dbPayload = {
         version: RAG_DB_VERSION,
-        chunks: Array.from(chunks.values()),
+        chunks: leanChunks,
     };
 
     const indexPayload: PersistedRagIndex = {
