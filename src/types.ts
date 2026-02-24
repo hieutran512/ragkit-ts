@@ -1,8 +1,16 @@
 /**
+ * Options passed to an embed function call.
+ */
+export interface EmbedOptions {
+    /** AbortSignal to cancel the embedding request. */
+    signal?: AbortSignal;
+}
+
+/**
  * Function that converts text strings into embedding vectors.
  * Users provide their own implementation or use a built-in adapter (e.g. Ollama).
  */
-export type EmbedFunction = (texts: string[]) => Promise<number[][]>;
+export type EmbedFunction = (texts: string[], options?: EmbedOptions) => Promise<number[][]>;
 
 // ---------------------------------------------------------------------------
 // Phases & Status
@@ -142,6 +150,10 @@ export interface IndexOptions {
     embedBatchSize?: number;
     /** Progress callback fired during indexing. */
     onProgress?: (status: RagStatus) => void;
+    /** AbortSignal to cancel indexing mid-operation. */
+    signal?: AbortSignal;
+    /** Directory where .rag-ts storage is created. Defaults to the source folder. */
+    outputFolder?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,6 +163,8 @@ export interface IndexOptions {
 export interface SearchOptions {
     /** Number of top results to return. Default: 6 */
     topK?: number;
+    /** Directory where .rag-ts storage was created. Defaults to the source folder. */
+    outputFolder?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -200,6 +214,8 @@ export interface CachedQueryResult {
 
 export interface FolderCache {
     folderPath: string;
+    /** Path used for .rag-ts storage. Falls back to folderPath when not set. */
+    storagePath?: string;
     config: RagFolderConfig;
     status: RagStatus;
     chunks: Map<string, RagChunk>;

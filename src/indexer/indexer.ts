@@ -53,6 +53,7 @@ async function runWithConcurrency<T>(
     items: T[],
     concurrency: number,
     worker: (item: T, index: number) => Promise<void>,
+    signal?: AbortSignal,
 ): Promise<void> {
     if (items.length === 0) return;
     const limit = Math.max(1, concurrency);
@@ -60,6 +61,9 @@ async function runWithConcurrency<T>(
 
     const runWorker = async (): Promise<void> => {
         while (true) {
+            if (signal?.aborted) {
+                throw signal.reason ?? new DOMException("Aborted", "AbortError");
+            }
             const current = nextIndex;
             nextIndex += 1;
             if (current >= items.length) return;
@@ -129,6 +133,9 @@ export class CodebaseIndexer {
         if (options?.excludeFolders) {
             config.excludeFolders = normalizeFolders(options.excludeFolders);
         }
+        if (options?.outputFolder) {
+            cache.storagePath = normalizeFolderPath(options.outputFolder);
+        }
 
         if (cache.runningIndex) {
             return cache.runningIndex;
@@ -138,6 +145,7 @@ export class CodebaseIndexer {
         const concurrency = options?.concurrency ?? FILE_EMBED_CONCURRENCY;
         const batchSize = options?.embedBatchSize ?? EMBED_BATCH_SIZE;
         const maxFileSize = options?.maxFileSize;
+        const signal = options?.signal;
 
         cache.status.phase = "scanning";
         cache.status.message = "Scanning files...";
@@ -152,6 +160,11 @@ export class CodebaseIndexer {
                     excludeFolders: config.excludeFolders,
                     maxFileSize,
                 });
+
+                if (signal?.aborted) {
+                    throw signal.reason ?? new DOMException("Aborted", "AbortError");
+                }
+
                 const currentFiles = new Set(candidates.map((f) => f.relativePath));
                 let changedIndex = false;
 
@@ -215,14 +228,21 @@ export class CodebaseIndexer {
 
                 // Chunk and embed changed files
                 await runWithConcurrency(filesToProcess, concurrency, async ({ file, content, contentHash }) => {
+                    if (signal?.aborted) {
+                        throw signal.reason ?? new DOMException("Aborted", "AbortError");
+                    }
+
                     const ext = extname(file.relativePath).toLowerCase();
                     const chunkResults = await this.codeChunker.chunk(content, { fileExtension: ext });
                     const texts = chunkResults.map((c) => c.content);
 
                     const vectors: number[][] = [];
                     for (let i = 0; i < texts.length; i += batchSize) {
+                        if (signal?.aborted) {
+                            throw signal.reason ?? new DOMException("Aborted", "AbortError");
+                        }
                         const batch = texts.slice(i, i + batchSize);
-                        const embedded = await this.embed(batch);
+                        const embedded = await this.embed(batch, { signal });
                         vectors.push(...embedded);
                     }
 
@@ -261,7 +281,7 @@ export class CodebaseIndexer {
                     cache.status.totalChunks = cache.chunks.size;
                     cache.status.message = `Embedding ${cache.status.embeddedFiles}/${cache.status.filesToEmbed} files...`;
                     onProgress?.(this.toStatus(cache));
-                });
+                }, signal);
 
                 cache.status.phase = "ready";
                 cache.status.totalChunks = cache.chunks.size;
@@ -276,14 +296,19 @@ export class CodebaseIndexer {
                 if (changedIndex) {
                     this.rebuildAnnIndex(cache);
                     cache.indexRevision += 1;
-                    await saveToDisk(cache.folderPath, cache.chunks, cache.fileStates);
+                    await saveToDisk(cache.folderPath, cache.chunks, cache.fileStates, cache.storagePath);
                 }
 
-                cache.status.dbSizeBytes = await getDbSizeBytes(cache.folderPath);
+                cache.status.dbSizeBytes = await getDbSizeBytes(cache.folderPath, cache.storagePath);
                 return this.toStatus(cache);
             } catch (err) {
-                cache.status.phase = "error";
-                cache.status.message = err instanceof Error ? err.message : "Failed to build RAG index";
+                if (err instanceof DOMException && err.name === "AbortError") {
+                    cache.status.phase = "idle";
+                    cache.status.message = "Indexing was cancelled";
+                } else {
+                    cache.status.phase = "error";
+                    cache.status.message = err instanceof Error ? err.message : "Failed to build RAG index";
+                }
                 return this.toStatus(cache);
             } finally {
                 onProgress?.(this.toStatus(cache));
@@ -313,10 +338,11 @@ export class CodebaseIndexer {
     /**
      * Clear the RAG index and persisted data for a folder.
      */
-    async clearFolder(folderPath: string): Promise<void> {
+    async clearFolder(folderPath: string, outputFolder?: string): Promise<void> {
         const normalized = normalizeFolderPath(folderPath);
+        const storagePath = outputFolder ? normalizeFolderPath(outputFolder) : undefined;
         this.caches.delete(normalized);
-        await clearStorage(normalized);
+        await clearStorage(normalized, storagePath);
     }
 
     /**
@@ -331,8 +357,11 @@ export class CodebaseIndexer {
      * Ensure persisted data is loaded for a folder. Used by {@link CodebaseSearcher}.
      * @internal
      */
-    async ensureLoaded(folderPath: string): Promise<FolderCache> {
+    async ensureLoaded(folderPath: string, storagePath?: string): Promise<FolderCache> {
         const cache = this.ensureCache(folderPath);
+        if (storagePath) {
+            cache.storagePath = normalizeFolderPath(storagePath);
+        }
         await this.ensurePersistedLoaded(cache);
         return cache;
     }
@@ -394,7 +423,7 @@ export class CodebaseIndexer {
         if (cache.persistedLoaded) return;
 
         try {
-            const loaded = await loadFromDisk(cache.folderPath);
+            const loaded = await loadFromDisk(cache.folderPath, cache.storagePath);
             cache.chunks = loaded.chunks;
             cache.fileStates = loaded.fileStates;
             if (loaded.lastIndexedAt) {
@@ -406,7 +435,7 @@ export class CodebaseIndexer {
         } finally {
             cache.persistedLoaded = true;
             cache.status.totalChunks = cache.chunks.size;
-            cache.status.dbSizeBytes = await getDbSizeBytes(cache.folderPath);
+            cache.status.dbSizeBytes = await getDbSizeBytes(cache.folderPath, cache.storagePath);
             this.rebuildAnnIndex(cache);
         }
     }

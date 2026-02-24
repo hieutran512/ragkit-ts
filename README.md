@@ -13,12 +13,14 @@ TypeScript RAG toolkit for indexing and searching source code or documents.
 
 - **Fast incremental indexing**: only changed files are re-embedded.
 - **Pluggable embeddings**: use Ollama, OpenAI-compatible local APIs (LM Studio/LocalAI/vLLM-style), or your own provider.
+- **Cancellable indexing**: pass an `AbortSignal` to stop long-running index jobs mid-operation.
+- **Flexible storage**: persist the `.rag-ts/` index inside the source folder or a separate output directory.
 - **Good defaults**: sensible chunking, search, and storage behavior.
 - **Consumer-friendly API**: index, search, and prompt-context generation in a few calls.
 
-## Architecture 
+## Architecture
 
-This package (`ragkit-ts`) uses a **local, file-based index** stored under your project folder.
+This package (`ragkit-ts`) uses a **local, file-based index** stored under your project folder (or a custom output folder).
 
 ### Our approach (local file-based index)
 
@@ -49,7 +51,7 @@ For `ragkit-ts`, a better definition is based on the **indexed dataset**:
 
 - **Indexed files** (`totalFiles`): files matched by `includeExtensions` and not removed by `excludeFolders`.
 - **Indexed chunks** (`totalChunks`): the real retrieval workload after chunking.
-- **Index size** (`dbSizeBytes`): on-disk storage cost of your `.rag/` data.
+- **Index size** (`dbSizeBytes`): on-disk storage cost of your `.rag-ts/` data.
 
 Rule-of-thumb ranges (not hard limits):
 
@@ -129,12 +131,14 @@ const status = await indexer.getStatus(folderPath);
 await indexer.clearFolder(folderPath);
 ```
 
-Example: log embedding/file/chunk/size stats during indexing.
+#### Progress monitoring
+
+Log embedding/file/chunk/size stats during indexing.
 
 ```ts
 import { CodebaseIndexer, createOllamaEmbed } from "ragkit-ts";
 
-const folderPath = "c:/projects/my-app";
+const folderPath = "/projects/my-app";
 const embed = createOllamaEmbed({ model: "nomic-embed-text" });
 const indexer = new CodebaseIndexer({ embed });
 
@@ -155,52 +159,320 @@ console.log({
 });
 ```
 
+#### Cancelling indexing with AbortSignal
+
+Cancel a long-running indexing job mid-operation. When aborted, in-flight network requests are cancelled and no partial data is persisted.
+
+```ts
+import { CodebaseIndexer, createOllamaEmbed } from "ragkit-ts";
+
+const embed = createOllamaEmbed();
+const indexer = new CodebaseIndexer({ embed });
+
+const controller = new AbortController();
+
+// Cancel after 30 seconds
+setTimeout(() => controller.abort(), 30_000);
+
+const status = await indexer.index("/projects/large-repo", {
+  includeExtensions: [".ts", ".js", ".py"],
+  signal: controller.signal,
+});
+
+if (status.phase === "idle" && status.message?.includes("cancelled")) {
+  console.log("Indexing was cancelled before completion");
+} else {
+  console.log(`Indexing complete: ${status.totalChunks} chunks`);
+}
+```
+
+You can also abort from a progress callback:
+
+```ts
+const controller = new AbortController();
+
+await indexer.index("/projects/my-app", {
+  signal: controller.signal,
+  onProgress: (s) => {
+    // Stop once we've embedded enough files
+    if (s.embeddedFiles >= 100) {
+      controller.abort();
+    }
+  },
+});
+```
+
+#### Custom output folder
+
+By default, the `.rag-ts/` storage directory is created inside the source folder being indexed. You can redirect it to a separate output directory instead.
+
+```ts
+import { CodebaseIndexer, CodebaseSearcher, createOllamaEmbed } from "ragkit-ts";
+
+const embed = createOllamaEmbed();
+const indexer = new CodebaseIndexer({ embed });
+
+// Index source code, but store .rag-ts/ in a separate folder
+await indexer.index("/projects/my-app", {
+  includeExtensions: [".ts", ".js"],
+  outputFolder: "/data/rag-indexes/my-app",
+});
+
+// Search using the same output folder
+const searcher = new CodebaseSearcher({ embed, indexer });
+const result = await searcher.search("/projects/my-app", "auth middleware", {
+  topK: 5,
+  outputFolder: "/data/rag-indexes/my-app",
+});
+
+for (const match of result.matches) {
+  console.log(match.filePath, match.score);
+}
+
+// Get LLM context from the output folder
+const context = await searcher.getContextForQuery(
+  "/projects/my-app",
+  "auth middleware",
+  { outputFolder: "/data/rag-indexes/my-app" },
+);
+
+// Clear the index in the output folder
+await indexer.clearFolder("/projects/my-app", "/data/rag-indexes/my-app");
+```
+
+This is useful when:
+- You don't want to pollute the source repo with index files.
+- The source folder is read-only (e.g., mounted volume, CI checkout).
+- You want to store indexes in a shared or centralized location.
+
 ### CodebaseSearcher
 
 ```ts
 const searcher = new CodebaseSearcher({ embed, indexer });
 
+// Ranked search results
 const result = await searcher.search(folderPath, "jwt validation", { topK: 6 });
+
+for (const match of result.matches) {
+  console.log(`${match.filePath} (score: ${match.score})`);
+  console.log(match.content);
+}
+
+// Formatted context string for LLM prompts
 const context = await searcher.getContextForQuery(folderPath, "jwt validation");
+console.log(context);
+// Output:
+// ## RAG Context (project files)
+// Use the following snippets as additional project context when relevant:
+//
+// ### src/auth/jwt.ts
+// <chunk content>
 ```
 
 ### Embeddings
 
-Built-in Ollama adapter:
+#### Ollama adapter
 
 ```ts
 import { createOllamaEmbed } from "ragkit-ts";
 
 const embed = createOllamaEmbed({
-  baseUrl: "http://localhost:11434", // optional
-  model: "nomic-embed-text", // optional
+  baseUrl: "http://localhost:11434", // default
+  model: "nomic-embed-text",        // default
 });
+
+const vectors = await embed(["hello world", "how are you"]);
+// vectors: number[][] -- one vector per input text
 ```
 
-Built-in OpenAI-compatible adapter (works with many local tools exposing `/v1/embeddings`, e.g. LM Studio, LocalAI, or vLLM-compatible gateways):
+#### OpenAI-compatible adapter
+
+Works with any server exposing `/v1/embeddings` (LM Studio, LocalAI, vLLM, OpenAI, etc.):
 
 ```ts
 import { createOpenAICompatibleEmbed } from "ragkit-ts";
 
 const embed = createOpenAICompatibleEmbed({
-  baseUrl: "http://localhost:1234", // optional
-  model: "nomic-embed-text-v1.5", // optional
-  // apiKey: process.env.OPENAI_API_KEY, // optional
+  baseUrl: "http://localhost:1234",      // default
+  endpointPath: "/v1/embeddings",        // default
+  model: "nomic-embed-text-v1.5",        // default
+  apiKey: process.env.OPENAI_API_KEY,    // optional -- sent as Bearer token
+  headers: { "X-Custom-Header": "val" }, // optional
 });
 ```
 
-Custom provider:
+#### Custom embedding provider
+
+Implement the `EmbedFunction` signature to use any provider:
 
 ```ts
 import type { EmbedFunction } from "ragkit-ts";
 
+// Simple custom provider
 const embed: EmbedFunction = async (texts) => {
-  // return one numeric vector per input text
-  return texts.map(() => [0.1, 0.2, 0.3]);
+  const response = await fetch("https://my-api.com/embeddings", {
+    method: "POST",
+    body: JSON.stringify({ texts }),
+  });
+  const data = await response.json();
+  return data.vectors; // number[][]
+};
+
+// AbortSignal is forwarded as the second argument (optional to handle)
+const embedWithAbort: EmbedFunction = async (texts, options) => {
+  const response = await fetch("https://my-api.com/embeddings", {
+    method: "POST",
+    body: JSON.stringify({ texts }),
+    signal: options?.signal, // cancel in-flight requests on abort
+  });
+  const data = await response.json();
+  return data.vectors;
 };
 ```
 
-## Output shape
+### File scanning
+
+Scan directories for candidate source files without indexing:
+
+```ts
+import { scanDirectory } from "ragkit-ts";
+
+const files = await scanDirectory("/projects/my-app", {
+  includeExtensions: [".ts", ".js", ".md"],
+  excludeFolders: ["node_modules", "dist", ".git"],
+  maxFileSize: 1_048_576, // 1 MB (default)
+});
+
+for (const file of files) {
+  console.log(file.relativePath, file.size, file.modifiedAt);
+}
+```
+
+### Chunking
+
+#### Text chunking (baseline)
+
+Splits text into overlapping fixed-size chunks:
+
+```ts
+import { TextChunker } from "ragkit-ts";
+
+const chunker = new TextChunker({
+  chunkSize: 1200,  // default
+  chunkOverlap: 200, // default
+});
+
+const chunks = chunker.chunk("your file content here...");
+for (const chunk of chunks) {
+  console.log(chunk.content.length, chunk.content.slice(0, 50));
+}
+```
+
+#### AST-aware code chunking
+
+Respects symbol boundaries (functions, classes, etc.) for supported languages. Falls back to text chunking for unsupported languages:
+
+```ts
+import { CodeChunker } from "ragkit-ts";
+
+const chunker = new CodeChunker({
+  chunkSize: 1200,
+  chunkOverlap: 200,
+});
+
+const chunks = await chunker.chunk(tsSourceCode, { fileExtension: ".ts" });
+for (const chunk of chunks) {
+  console.log(chunk.content.slice(0, 80));
+  if (chunk.symbols) {
+    for (const sym of chunk.symbols) {
+      console.log(`  ${sym.kind}: ${sym.name}`);
+    }
+  }
+}
+```
+
+### Vector utilities
+
+#### Cosine similarity
+
+```ts
+import { cosineSimilarity } from "ragkit-ts";
+
+const score = cosineSimilarity([1, 0, 0], [0.9, 0.1, 0]);
+console.log(score); // ~0.994
+```
+
+#### LSH approximate nearest neighbor index
+
+For fast candidate retrieval before exact cosine re-ranking:
+
+```ts
+import { LshIndex } from "ragkit-ts";
+
+const lsh = new LshIndex({
+  projectionDim: 16,           // default
+  maxHammingDistance: 3,        // default
+  fallbackMinCandidates: 32,   // default
+  maxRerankCandidates: 1200,   // default
+});
+
+// Build index from a map of chunks
+const annIndex = lsh.build(chunksMap);
+
+// Query for candidates near a query embedding
+const candidates = lsh.query(annIndex, queryEmbedding, chunksMap);
+// Returns RagChunk[] or null (null = too few candidates, use brute force)
+
+// Rank candidates by cosine similarity
+const ranked = lsh.rank(candidates, queryEmbedding, 10);
+for (const { chunk, score } of ranked) {
+  console.log(chunk.filePath, score);
+}
+```
+
+### Disk storage
+
+Low-level persistence functions for direct access to the `.rag-ts/` storage:
+
+```ts
+import { saveToDisk, loadFromDisk, getDbSizeBytes, clearStorage } from "ragkit-ts";
+
+// Save chunks and file states to disk
+await saveToDisk(folderPath, chunksMap, fileStatesMap);
+
+// Save to a custom output folder instead
+await saveToDisk(folderPath, chunksMap, fileStatesMap, "/data/rag-output");
+
+// Load persisted data
+const { chunks, fileStates, lastIndexedAt } = await loadFromDisk(folderPath);
+
+// Load from a custom output folder
+const loaded = await loadFromDisk(folderPath, "/data/rag-output");
+
+// Check index size
+const sizeBytes = await getDbSizeBytes(folderPath);
+
+// Remove index data
+await clearStorage(folderPath);
+```
+
+### LRU cache
+
+General-purpose LRU cache with optional TTL:
+
+```ts
+import { LruCache } from "ragkit-ts";
+
+const cache = new LruCache<number[]>(128, 10 * 60 * 1000); // max 128 entries, 10-min TTL
+
+cache.set("query-abc", [0.1, 0.2, 0.3]);
+const value = cache.get("query-abc"); // number[] | undefined
+console.log(cache.size);              // 1
+cache.delete("query-abc");
+cache.clear();
+```
+
+## Output shapes
 
 `search()` returns:
 
@@ -218,9 +490,38 @@ const embed: EmbedFunction = async (texts) => {
 }
 ```
 
+`getStatus()` returns:
+
+```ts
+{
+  folderPath: string;
+  enabled: boolean;
+  phase: "idle" | "scanning" | "embedding" | "ready" | "error";
+  totalFiles: number;
+  filesToEmbed: number;
+  embeddedFiles: number;
+  skippedUnchanged: number;
+  totalChunks: number;
+  dbSizeBytes: number;
+  lastIndexedAt?: number;
+  staleWarning: boolean;
+  staleAgeMs: number;
+  staleThresholdMs: number;
+  fileChangeDrift: number;
+  driftAddedFiles: number;
+  driftModifiedFiles: number;
+  driftDeletedFiles: number;
+  driftCheckedAt?: number;
+  message?: string;
+  includeExtensions: string[];
+  excludeFolders: string[];
+  cachedFolders: string[];
+}
+```
+
 ## Notes
 
-- Index data is persisted under a `.rag/` folder in the target project.
+- Index data is persisted under a `.rag-ts/` folder (configurable via `outputFolder`).
 - Unsupported languages gracefully fall back to text chunking.
 - Package ships with ESM + CJS builds and TypeScript declarations.
 
@@ -247,7 +548,7 @@ const indexer = new CodebaseIndexer({
   embed: createOllamaEmbed({ model: "nomic-embed-text" }),
 });
 
-await indexer.index("c:/projects/knowledge-base", {
+await indexer.index("/projects/knowledge-base", {
   includeExtensions: [".kb", ".md", ".ts"],
 });
 ```
@@ -330,7 +631,7 @@ const indexer = new CodebaseIndexer({
   embed: createOllamaEmbed({ model: "nomic-embed-text" }),
 });
 
-await indexer.index("c:/projects/toy-service", {
+await indexer.index("/projects/toy-service", {
   includeExtensions: [".toy"],
 });
 ```

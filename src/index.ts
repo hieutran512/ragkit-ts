@@ -32,6 +32,7 @@ export { LruCache } from "./cache/index.js";
 
 // Types
 export type {
+    EmbedOptions,
     EmbedFunction,
     RagPhase,
     RagStatus,

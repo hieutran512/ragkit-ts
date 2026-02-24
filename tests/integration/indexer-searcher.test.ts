@@ -20,11 +20,16 @@ const mockEmbed: EmbedFunction = async (texts) => texts.map(embedText);
 
 describe("CodebaseIndexer + CodebaseSearcher", () => {
     let root = "";
+    let outputDir = "";
 
     afterEach(async () => {
         if (root) {
             await rm(root, { recursive: true, force: true });
             root = "";
+        }
+        if (outputDir) {
+            await rm(outputDir, { recursive: true, force: true });
+            outputDir = "";
         }
     });
 
@@ -79,5 +84,66 @@ describe("CodebaseIndexer + CodebaseSearcher", () => {
         const context = await searcher.getContextForQuery(root, "alpha");
         expect(context).toContain("## RAG Context");
         expect(context).toContain("docs/alpha.md");
+    });
+
+    it("stops indexing when signal is aborted", async () => {
+        root = await mkdtemp(join(tmpdir(), "rag-ts-abort-"));
+        await mkdir(join(root, "docs"), { recursive: true });
+        for (let i = 0; i < 10; i++) {
+            await writeFile(join(root, "docs", `file${i}.md`), `content ${i} alpha beta`, "utf-8");
+        }
+
+        const controller = new AbortController();
+        let embedCallCount = 0;
+        const slowEmbed: EmbedFunction = async (texts) => {
+            embedCallCount++;
+            if (embedCallCount >= 2) controller.abort();
+            return texts.map(embedText);
+        };
+
+        const indexer = new CodebaseIndexer({ embed: slowEmbed });
+        const status = await indexer.index(root, {
+            includeExtensions: [".md"],
+            excludeFolders: [],
+            signal: controller.signal,
+            concurrency: 1,
+        });
+
+        expect(status.phase).toBe("idle");
+        expect(status.message).toContain("cancelled");
+    });
+
+    it("indexes to a separate output folder and searches from it", async () => {
+        root = await mkdtemp(join(tmpdir(), "rag-ts-src-"));
+        outputDir = await mkdtemp(join(tmpdir(), "rag-ts-out-"));
+        await mkdir(join(root, "docs"), { recursive: true });
+
+        await writeFile(join(root, "docs", "alpha.md"), "alpha system architecture", "utf-8");
+        await writeFile(join(root, "docs", "beta.md"), "beta deployment notes", "utf-8");
+
+        const indexer = new CodebaseIndexer({ embed: mockEmbed });
+        const status = await indexer.index(root, {
+            includeExtensions: [".md"],
+            excludeFolders: [],
+            outputFolder: outputDir,
+        });
+
+        expect(status.phase).toBe("ready");
+
+        // Verify .rag-ts exists in outputDir, not root
+        const dbInOutput = join(outputDir, RAG_STORAGE_DIR, RAG_DB_FILE);
+        const dbInSource = join(root, RAG_STORAGE_DIR, RAG_DB_FILE);
+        await expect(readFile(dbInOutput, "utf-8")).resolves.toContain("alpha");
+        await expect(readFile(dbInSource, "utf-8")).rejects.toThrow();
+
+        // Search using the outputFolder
+        const searcher = new CodebaseSearcher({ embed: mockEmbed, indexer });
+        const result = await searcher.search(root, "alpha", { topK: 1, outputFolder: outputDir });
+        expect(result.matches).toHaveLength(1);
+        expect(result.matches[0].filePath).toBe("docs/alpha.md");
+
+        // clearFolder with outputFolder
+        await indexer.clearFolder(root, outputDir);
+        await expect(readFile(dbInOutput, "utf-8")).rejects.toThrow();
     });
 });

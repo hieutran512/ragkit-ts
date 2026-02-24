@@ -8,11 +8,16 @@ import type { RagChunk, RagFileState } from "../../src/types.js";
 
 describe("disk storage", () => {
     let root = "";
+    let extraRoot = "";
 
     afterEach(async () => {
         if (root) {
             await rm(root, { recursive: true, force: true });
             root = "";
+        }
+        if (extraRoot) {
+            await rm(extraRoot, { recursive: true, force: true });
+            extraRoot = "";
         }
     });
 
@@ -70,6 +75,36 @@ describe("disk storage", () => {
         const loaded = await loadFromDisk(root);
         expect(loaded.chunks.size).toBe(0);
         expect(loaded.fileStates.size).toBe(0);
+    });
+
+    it("saves and loads with custom storagePath", async () => {
+        root = await mkdtemp(join(tmpdir(), "rag-ts-src-"));
+        extraRoot = await mkdtemp(join(tmpdir(), "rag-ts-out-"));
+
+        const chunks = new Map<string, RagChunk>([
+            ["id-1", { id: "id-1", filePath: "a.ts", modifiedAt: 1, content: "hello", embedding: [1, 2, 3] }],
+        ]);
+        const states = new Map<string, RagFileState>([
+            ["a.ts", { modifiedAt: 1, size: 5, contentHash: "abc", chunkIds: ["id-1"] }],
+        ]);
+
+        await saveToDisk(root, chunks, states, extraRoot);
+
+        // Verify storage is in extraRoot, not root
+        const dbInOutput = join(extraRoot, RAG_STORAGE_DIR, RAG_DB_FILE);
+        const dbInSource = join(root, RAG_STORAGE_DIR, RAG_DB_FILE);
+        await expect(readFile(dbInOutput, "utf-8")).resolves.toContain("hello");
+        await expect(readFile(dbInSource, "utf-8")).rejects.toThrow();
+
+        const loaded = await loadFromDisk(root, extraRoot);
+        expect(loaded.chunks.size).toBe(1);
+        expect(loaded.chunks.get("id-1")?.content).toBe("hello");
+
+        const dbSize = await getDbSizeBytes(root, extraRoot);
+        expect(dbSize).toBeGreaterThan(0);
+
+        await clearStorage(root, extraRoot);
+        await expect(readFile(dbInOutput, "utf-8")).rejects.toThrow();
     });
 
     it("clears storage directory", async () => {

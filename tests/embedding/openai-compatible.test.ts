@@ -83,4 +83,19 @@ describe("createOpenAICompatibleEmbed", () => {
         await expect(embed([])).resolves.toEqual([]);
         expect(fetchMock).not.toHaveBeenCalled();
     });
+
+    it("passes abort signal to fetch calls", async () => {
+        const controller = new AbortController();
+        const fetchMock = vi.fn<typeof fetch>();
+        fetchMock.mockImplementation(async () => ({
+            ok: true,
+            json: async () => ({ data: [{ index: 0, embedding: [1, 2] }] }),
+        } as Response));
+        global.fetch = fetchMock as unknown as typeof fetch;
+
+        const embed = createOpenAICompatibleEmbed();
+        await embed(["test"], { signal: controller.signal });
+
+        expect(fetchMock.mock.calls[0][1]).toHaveProperty("signal", controller.signal);
+    });
 });

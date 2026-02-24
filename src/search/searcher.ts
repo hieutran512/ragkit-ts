@@ -56,7 +56,7 @@ export class CodebaseSearcher {
      */
     async search(folderPath: string, query: string, options?: SearchOptions): Promise<RagSearchResult> {
         const startedAt = performance.now();
-        const cache = await this.indexer.ensureLoaded(folderPath);
+        const cache = await this.indexer.ensureLoaded(folderPath, options?.outputFolder);
         const topK = options?.topK ?? TOP_K;
 
         if (!cache.config.enabled || cache.chunks.size === 0) {
@@ -88,8 +88,8 @@ export class CodebaseSearcher {
     /**
      * Get RAG context as a formatted string for injection into LLM prompts.
      */
-    async getContextForQuery(folderPath: string, query: string): Promise<string> {
-        const cache = await this.indexer.ensureLoaded(folderPath);
+    async getContextForQuery(folderPath: string, query: string, options?: SearchOptions): Promise<string> {
+        const cache = await this.indexer.ensureLoaded(folderPath, options?.outputFolder);
         if (!cache.config.enabled || cache.chunks.size === 0 || !query.trim()) return "";
 
         const ranked = await this.getRankedChunks(cache, query, TOP_K);

@@ -1,4 +1,4 @@
-import type { EmbedFunction } from "../types.js";
+import type { EmbedFunction, EmbedOptions } from "../types.js";
 import type { OllamaEmbedOptions } from "./types.js";
 
 /**
@@ -17,14 +17,16 @@ export function createOllamaEmbed(options?: OllamaEmbedOptions): EmbedFunction {
     const baseUrl = (options?.baseUrl ?? "http://localhost:11434").replace(/\/+$/, "");
     const model = options?.model ?? "nomic-embed-text";
 
-    return async (input: string[]): Promise<number[][]> => {
+    return async (input: string[], embedOptions?: EmbedOptions): Promise<number[][]> => {
         if (input.length === 0) return [];
+        const signal = embedOptions?.signal;
 
         // Try batch endpoint first
         const batchResponse = await fetch(`${baseUrl}/api/embed`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ model, input }),
+            signal,
         });
 
         if (batchResponse.ok) {
@@ -41,6 +43,7 @@ export function createOllamaEmbed(options?: OllamaEmbedOptions): EmbedFunction {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ model, prompt: text }),
+                signal,
             });
 
             if (!response.ok) {

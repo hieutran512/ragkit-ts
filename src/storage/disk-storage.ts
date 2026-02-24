@@ -29,8 +29,8 @@ function truncateEmbedding(embedding: number[]): number[] {
     return embedding.map((v) => Math.round(v * factor) / factor);
 }
 
-function getPaths(folderPath: string) {
-    const ragDir = join(folderPath, RAG_STORAGE_DIR);
+function getPaths(folderPath: string, storagePath?: string) {
+    const ragDir = join(storagePath ?? folderPath, RAG_STORAGE_DIR);
     return {
         ragDir,
         dbPath: join(ragDir, RAG_DB_FILE),
@@ -42,8 +42,8 @@ function getPaths(folderPath: string) {
  * Load persisted RAG data from the `.rag/` directory inside a project folder.
  * Returns empty maps if no data exists or the data is corrupt.
  */
-export async function loadFromDisk(folderPath: string): Promise<LoadResult> {
-    const { dbPath, indexPath } = getPaths(folderPath);
+export async function loadFromDisk(folderPath: string, storagePath?: string): Promise<LoadResult> {
+    const { dbPath, indexPath } = getPaths(folderPath, storagePath);
     const chunks = new Map<string, RagChunk>();
     const fileStates = new Map<string, RagFileState>();
     let lastIndexedAt: number | undefined;
@@ -107,8 +107,9 @@ export async function saveToDisk(
     folderPath: string,
     chunks: Map<string, RagChunk>,
     fileStates: Map<string, RagFileState>,
+    storagePath?: string,
 ): Promise<void> {
-    const { ragDir, dbPath, indexPath } = getPaths(folderPath);
+    const { ragDir, dbPath, indexPath } = getPaths(folderPath, storagePath);
     await mkdir(ragDir, { recursive: true });
 
     const leanChunks: PersistedChunk[] = Array.from(chunks.values()).map((chunk) => ({
@@ -138,8 +139,8 @@ export async function saveToDisk(
 /**
  * Get the size of the persisted DB file in bytes.
  */
-export async function getDbSizeBytes(folderPath: string): Promise<number> {
-    const { dbPath } = getPaths(folderPath);
+export async function getDbSizeBytes(folderPath: string, storagePath?: string): Promise<number> {
+    const { dbPath } = getPaths(folderPath, storagePath);
     try {
         const st = await stat(dbPath);
         return st.size;
@@ -151,8 +152,8 @@ export async function getDbSizeBytes(folderPath: string): Promise<number> {
 /**
  * Remove the `.rag/` directory from a project folder.
  */
-export async function clearStorage(folderPath: string): Promise<void> {
-    const { ragDir } = getPaths(folderPath);
+export async function clearStorage(folderPath: string, storagePath?: string): Promise<void> {
+    const { ragDir } = getPaths(folderPath, storagePath);
     try {
         await rm(ragDir, { recursive: true, force: true });
     } catch {

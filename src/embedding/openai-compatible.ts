@@ -1,4 +1,4 @@
-import type { EmbedFunction } from "../types.js";
+import type { EmbedFunction, EmbedOptions } from "../types.js";
 import type { OpenAICompatibleEmbedOptions } from "./types.js";
 
 interface OpenAICompatibleEmbeddingResponse {
@@ -28,7 +28,7 @@ export function createOpenAICompatibleEmbed(options?: OpenAICompatibleEmbedOptio
     const apiKey = options?.apiKey;
     const headers = options?.headers;
 
-    return async (input: string[]): Promise<number[][]> => {
+    return async (input: string[], embedOptions?: EmbedOptions): Promise<number[][]> => {
         if (input.length === 0) return [];
 
         const requestHeaders: Record<string, string> = {
@@ -44,6 +44,7 @@ export function createOpenAICompatibleEmbed(options?: OpenAICompatibleEmbedOptio
             method: "POST",
             headers: requestHeaders,
             body: JSON.stringify({ model, input }),
+            signal: embedOptions?.signal,
         });
 
         if (!response.ok) {
